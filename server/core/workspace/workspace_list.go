@@ -54,6 +54,11 @@ func (h *ListWorkspaceHandler) Handle(ctx context.Context, query ListWorkspaceQu
 		return nil, err
 	}
 
+	// label all workspaces
+	for i := range ww.Items {
+		LabelWorkspaceOwner(&ww.Items[i], u)
+	}
+
 	// reply
 	return &ListWorkspaceResponse{Workspaces: ww}, nil
 }

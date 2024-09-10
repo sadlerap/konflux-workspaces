@@ -54,6 +54,8 @@ func (h *ReadWorkspaceHandler) Handle(ctx context.Context, query ReadWorkspaceQu
 		return nil, err
 	}
 
+	LabelWorkspaceOwner(&w, u)
+
 	// reply
 	return &ReadWorkspaceResponse{
 		Workspace: &w,

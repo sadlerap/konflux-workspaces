@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -44,41 +45,96 @@ var _ = Describe("WorkspaceList", func() {
 		Expect(response).To(BeNil())
 	})
 
-	It("should allow authenticated requests", func() {
-		// given
+	Describe("authenticated requests", func() {
 		username := "foo"
-		ctx := context.WithValue(ctx, ccontext.UserSignupComplaintNameKey, username)
-		lister.EXPECT().
-			ListUserWorkspaces(ctx, username, &restworkspacesv1alpha1.WorkspaceList{}, gomock.Any()).
-			Return(nil)
+		BeforeEach(func() {
+			ctx = context.WithValue(ctx, ccontext.UserSignupComplaintNameKey, username)
+		})
 
-		// when
-		response, err := handler.Handle(ctx, request)
+		It("should allow authenticated requests", func() {
+			// given
+			lister.EXPECT().
+				ListUserWorkspaces(ctx, username, &restworkspacesv1alpha1.WorkspaceList{}, gomock.Any()).
+				Return(nil)
 
-		// then
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response).To(Equal(&workspace.ListWorkspaceResponse{
-			Workspaces: restworkspacesv1alpha1.WorkspaceList{
-				TypeMeta: metav1.TypeMeta{},
-			},
-		}))
-	})
+			// when
+			response, err := handler.Handle(ctx, request)
 
-	It("should forward errors from the workspace reader", func() {
-		// given
-		username := "foo"
-		ctx := context.WithValue(ctx, ccontext.UserSignupComplaintNameKey, username)
-		error := fmt.Errorf("Failed to create workspace!")
-		lister.EXPECT().
-			ListUserWorkspaces(ctx, username, &restworkspacesv1alpha1.WorkspaceList{}, gomock.Any()).
-			Return(error)
+			// then
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).To(Equal(&workspace.ListWorkspaceResponse{
+				Workspaces: restworkspacesv1alpha1.WorkspaceList{
+					TypeMeta: metav1.TypeMeta{},
+				},
+			}))
+		})
 
-		// when
-		response, err := handler.Handle(ctx, request)
+		It("should preserve owner labels", func() {
+			// given
+			secondUsername := "bar"
+			lister.EXPECT().
+				ListUserWorkspaces(ctx, username, &restworkspacesv1alpha1.WorkspaceList{}, gomock.Any()).
+				Do(func(_ context.Context, username string, workspaces *restworkspacesv1alpha1.WorkspaceList, opts *client.ListOptions) {
+					workspaces.Items = []restworkspacesv1alpha1.Workspace{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "default",
+								Namespace: username,
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "default",
+								Namespace: secondUsername,
+							},
+						},
+					}
+				}).
+				Return(nil)
 
-		// then
-		Expect(response).To(BeNil())
-		Expect(err).To(HaveOccurred())
-		Expect(err).To(Equal(error))
+			// when
+			response, err := handler.Handle(ctx, request)
+			transform := func(ws restworkspacesv1alpha1.Workspace) metav1.ObjectMeta {
+				return ws.ObjectMeta
+			}
+
+			// then
+			Expect(err).NotTo(HaveOccurred())
+			Expect(response).NotTo(BeNil())
+			Expect(response.Workspaces.Items).To(ConsistOf(
+				WithTransform(transform, And(
+					HaveExistingField("Name"),
+					HaveExistingField("Namespace"),
+					HaveExistingField("Labels"),
+					HaveField("Name", "default"),
+					HaveField("Namespace", username),
+					HaveField("Labels", HaveKeyWithValue(restworkspacesv1alpha1.LabelIsOwner, "true")),
+				)),
+				WithTransform(transform, And(
+					HaveExistingField("Name"),
+					HaveExistingField("Namespace"),
+					HaveExistingField("Labels"),
+					HaveField("Name", "default"),
+					HaveField("Namespace", secondUsername),
+					HaveField("Labels", HaveKeyWithValue(restworkspacesv1alpha1.LabelIsOwner, "false")),
+				)),
+			))
+		})
+
+		It("should forward errors from the workspace reader", func() {
+			// given
+			error := fmt.Errorf("Failed to create workspace!")
+			lister.EXPECT().
+				ListUserWorkspaces(ctx, username, &restworkspacesv1alpha1.WorkspaceList{}, gomock.Any()).
+				Return(error)
+
+			// when
+			response, err := handler.Handle(ctx, request)
+
+			// then
+			Expect(response).To(BeNil())
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(error))
+		})
 	})
 })

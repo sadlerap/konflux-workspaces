@@ -27,6 +27,9 @@ const (
 	WorkspaceVisibilityCommunity WorkspaceVisibility = "community"
 	// WorkspaceVisibilityPrivate Private value for Workspaces visibility
 	WorkspaceVisibilityPrivate WorkspaceVisibility = "private"
+
+	// LabelInternalDomain if the requesting user is the owner of the workspace
+	LabelIsOwner string = "workspaces.konflux-ci.dev/is-owner"
 )
 
 // WorkspaceSpec defines the desired state of Workspace

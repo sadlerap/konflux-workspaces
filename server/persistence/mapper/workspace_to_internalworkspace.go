@@ -14,7 +14,7 @@ import (
 func (m *Mapper) WorkspaceToInternalWorkspace(workspace *restworkspacesv1alpha1.Workspace) (*workspacesv1alpha1.InternalWorkspace, error) {
 	ll := map[string]string{}
 	for k, v := range workspace.GetLabels() {
-		if !strings.HasPrefix(k, workspacesv1alpha1.LabelInternalDomain) {
+		if !strings.HasPrefix(k, workspacesv1alpha1.LabelInternalDomain) || k == restworkspacesv1alpha1.LabelIsOwner {
 			ll[k] = v
 		}
 	}

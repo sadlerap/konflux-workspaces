@@ -64,6 +64,7 @@ func buildExampleValidWorkspace(displayName, ownerName string) restworkspacesv1a
 			Labels: map[string]string{
 				"expected-label": "not-empty",
 				workspacesv1alpha1.LabelInternalDomain + "not-expected-label": "not-empty",
+                restworkspacesv1alpha1.LabelIsOwner: "true",
 			},
 			Generation: 1,
 		},
@@ -89,6 +90,7 @@ func validateMappedInternalWorkspace(w *workspacesv1alpha1.InternalWorkspace, fr
 	Expect(w.GetLabels()).To(HaveKey("expected-label"))
 	Expect(w.GetLabels()["expected-label"]).To(Equal("not-empty"))
 	Expect(w.GetLabels()).NotTo(HaveKey(workspacesv1alpha1.LabelInternalDomain + "not-expected-label"))
+	Expect(w.GetLabels()).NotTo(HaveKey(restworkspacesv1alpha1.LabelIsOwner))
 	Expect(w.Spec).ToNot(BeNil())
 	Expect(w.Spec.DisplayName).To(Equal(from.Name))
 	Expect(w.Status.Owner.Username).To(Equal(from.Namespace))

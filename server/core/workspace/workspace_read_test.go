@@ -44,39 +44,131 @@ var _ = Describe("WorkspaceRead", func() {
 		Expect(response).To(BeNil())
 	})
 
-	It("should allow authenticated requests", func() {
+	When("the request is authenticated", func() {
 		// given
 		username := "foo"
-		ctx := context.WithValue(ctx, ccontext.UserSignupComplaintNameKey, username)
-		reader.EXPECT().
-			ReadUserWorkspace(ctx, username, request.Owner, request.Name, &restworkspacesv1alpha1.Workspace{}, []client.GetOption{}).
-			Return(nil)
 
-		// when
-		response, err := handler.Handle(ctx, request)
+		BeforeEach(func() {
+			ctx = context.WithValue(ctx, ccontext.UserSignupComplaintNameKey, username)
+			request.Owner = username
+			request.Name = "default"
+		})
 
-		// then
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response).To(Equal(&workspace.ReadWorkspaceResponse{
-			Workspace: &restworkspacesv1alpha1.Workspace{},
-		}))
-	})
+		It("should allow authenticated requests", func() {
+			// given
+			reader.EXPECT().
+				ReadUserWorkspace(ctx,
+					username,
+					request.Owner,
+					request.Name,
+					&restworkspacesv1alpha1.Workspace{},
+					[]client.GetOption{}).
+				Return(nil)
 
-	It("should forward errors from the workspace reader", func() {
-		// given
-		username := "foo"
-		ctx := context.WithValue(ctx, ccontext.UserSignupComplaintNameKey, username)
-		error := fmt.Errorf("Failed to create workspace!")
-		reader.EXPECT().
-			ReadUserWorkspace(ctx, username, request.Owner, request.Name, &restworkspacesv1alpha1.Workspace{}, []client.GetOption{}).
-			Return(error)
+			// when
+			_, err := handler.Handle(ctx, request)
 
-		// when
-		response, err := handler.Handle(ctx, request)
+			// then
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		// then
-		Expect(response).To(BeNil())
-		Expect(err).To(HaveOccurred())
-		Expect(err).To(Equal(error))
+		It("should forward errors from the workspace reader", func() {
+			// given
+			error := fmt.Errorf("Failed to create workspace!")
+			reader.EXPECT().
+				ReadUserWorkspace(ctx,
+					username,
+					request.Owner,
+					request.Name,
+					&restworkspacesv1alpha1.Workspace{},
+					[]client.GetOption{}).
+				Return(error)
+
+			// when
+			response, err := handler.Handle(ctx, request)
+
+			// then
+			Expect(response).To(BeNil())
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(Equal(error))
+		})
+
+		When("a user requests an owned workspace", func() {
+			It("should set the owned label to true", func() {
+				// given
+				reader.EXPECT().ReadUserWorkspace(ctx,
+					username,
+					request.Owner,
+					request.Name,
+					&restworkspacesv1alpha1.Workspace{},
+					[]client.GetOption{}).
+					Do(func(_ context.Context, _, owner, name string, ws *restworkspacesv1alpha1.Workspace, _ ...client.GetOption) {
+						ws.SetName(name)
+						ws.SetNamespace(owner)
+					}).
+					Return(nil)
+
+				// when
+				response, err := handler.Handle(ctx, request)
+
+				// then
+				Expect(err).NotTo(HaveOccurred())
+				Expect(response.Workspace).NotTo(BeNil())
+				Expect(response.Workspace.Labels).To(HaveKeyWithValue(restworkspacesv1alpha1.LabelIsOwner, "true"))
+			})
+
+			It("should preserve existing labels", func() {
+				// given
+				reader.EXPECT().ReadUserWorkspace(ctx,
+					username,
+					request.Owner,
+					request.Name,
+					&restworkspacesv1alpha1.Workspace{},
+					[]client.GetOption{}).
+					Do(func(_ context.Context, _, owner, name string, ws *restworkspacesv1alpha1.Workspace, _ ...client.GetOption) {
+						ws.SetName(name)
+						ws.SetNamespace(owner)
+						ws.Labels = map[string]string{"foo": "bar"}
+					}).
+					Return(nil)
+
+				// when
+				response, err := handler.Handle(ctx, request)
+
+				// then
+				Expect(err).NotTo(HaveOccurred())
+				Expect(response.Workspace).NotTo(BeNil())
+				Expect(response.Workspace.Labels).To(HaveKeyWithValue(restworkspacesv1alpha1.LabelIsOwner, "true"))
+				Expect(response.Workspace.Labels).To(HaveKeyWithValue("foo", "bar"))
+			})
+		})
+
+		When("a user requests another workspace", func() {
+			actualOwner := "bar"
+
+			It("should set the owned label to false", func() {
+				// given
+				request.Owner = actualOwner
+				reader.EXPECT().ReadUserWorkspace(ctx,
+					username,
+					request.Owner,
+					request.Name,
+					&restworkspacesv1alpha1.Workspace{},
+					[]client.GetOption{}).
+					Do(func(_ context.Context, _, owner, name string, ws *restworkspacesv1alpha1.Workspace, _ ...client.GetOption) {
+						ws.SetName(name)
+						ws.SetNamespace(owner)
+					}).
+					Return(nil)
+
+				// when
+				response, err := handler.Handle(ctx, request)
+
+				// then
+				Expect(err).NotTo(HaveOccurred())
+				Expect(response.Workspace).NotTo(BeNil())
+				Expect(response.Workspace.Labels).To(HaveKeyWithValue(restworkspacesv1alpha1.LabelIsOwner, "false"))
+			})
+		})
 	})
 })
